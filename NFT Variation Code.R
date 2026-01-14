@@ -11,7 +11,7 @@
   library(nlme)
   library(readxl)
   
-  setwd("/Users/tiger/OneDrive/Documents/Research/Bee Physiology")
+  setwd()
 
 
 #-------------------------------------------------------
@@ -291,18 +291,12 @@
                 alpha = 0.25) +
     scale_color_manual(values = c("Small" = "grey60", "Large" = "black")) + 
     scale_fill_manual(values = c("Small" = "grey50", "Large"= "black")) + 
-    scale_shape_manual(values = c("Large" = 1, "Small" = 16))+
     theme_bw() + 
     xlab("Time (min)") + ylab(expression(T["est"]~(degree*C))) + 
     labs(color = "") + labs(fill = "")
 
   
 #-- Comparing intertegular distance size classes of workers and drones --
-  ### We used 3.16 grams as it was approximately the lower quartile
-  ### for both castes.  
-  ggplot(data = subset(datAI, caste.x == "drone"),
-         aes(x = ITD)) + 
-    geom_histogram()
   
   ## Data cleaning
   ITD2$caste <- tolower(ITD2$caste)
@@ -313,6 +307,12 @@
   head(datAI)
   summary(ITD2$beeid)
   summary(datA$beeid)
+  
+  ### We used 3.16 grams as it was approximately the lower quartile
+  ### for both castes.  
+  ggplot(data = subset(datAI, caste.x == "drone"),
+         aes(x = ITD)) + 
+    geom_histogram()
   
 #-- Fitting GAM model with ITD --  
   fmm7 <- gam(thoraxtemp ~ s(elapse_min, by = caste.x) + 
@@ -343,7 +343,7 @@
               data = datAI.nq)
   anova(fmm8)
   
-  prds <- predict_gam(fmm7, interval = "conf", exclude = "s(beeid)", level = 0.95)
+  prds <- predict_gam(fmm8, interval = "conf", exclude = "s(beeid)", level = 0.95)
   datAIA.nq <- cbind(datAI.nq, prds)
 
 #-- Visualization of GAM model for ITD -- 
@@ -356,7 +356,6 @@
     geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5, fill = size, color = NULL),alpha = 0.25) +
     scale_color_manual(values = c("Small" = "grey60", "Large" = "black")) + 
     scale_fill_manual(values = c("Small" = "grey50", "Large"= "black")) + 
-    scale_shape_manual(values = c("Large" = 1, "Small" = 16))+
     theme_bw() + 
     xlab("Time (min)") + ylab(expression(T["est"]~(degree*C))) + 
     labs(color = "") + labs(fill = "")  
