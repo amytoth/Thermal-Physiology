@@ -129,6 +129,7 @@
 #3.Incorperating Mass Effects
 
 #-- Load data and format --
+  ### Mass
   mass <- read_excel("1. Meta Data.xlsx")
   names(mass) <- c("beeid", "species", "caste", "NFT_date",
                    "collection_date", "site", "wing_score",
@@ -137,11 +138,22 @@
   mass$beeid <- as.factor(mass$beeid)
   mass2 <- na.omit(mass[, c(1:6, 8:11)])
   
+  ### ITD
+  ITD <- read_excel("1. Meta Data.xlsx")
+  names(ITD) <- c("beeid", "species", "caste", "NFT_date",
+                  "collection_date", "site", "wing_score",
+                  "ITD", "mass", "NFT_images", "processed",
+                  "column1")
+  ITD$beeid <- as.factor(ITD$beeid)
+  ITD2 <- na.omit(ITD[, c(1:6, 8:11)])
+  
   ### Plot to check data
   ggplot(data = mass2, aes(x = caste, y = mass)) + 
     geom_point()
+  ggplot(data = ITD2, aes(x = caste, y = ITD)) + 
+    geom_point()
   
-  
+  ## Data cleaning
   mass2$caste <- tolower(mass2$caste)
   mass2$beeid <- tolower(gsub("Bimp", "", mass2$beeid))
   
@@ -234,8 +246,8 @@
   anova(fmm4)
   plot(fmm4)
   
-#-- Comparing size classes of workers and drones --
-  ### We used the size 0.15 grams as it was approximately the lower quartile
+#-- Comparing mass size classes of workers and drones --
+  ### We used 0.15 grams as it was approximately the lower quartile
   ### for both castes. 
   
   ggplot(data = subset(datAM, caste.x == "drone"),
@@ -255,7 +267,7 @@
   datAM.nq$caste_size <- as.factor(with(datAM.nq, paste(caste.x, size, 
                                                         sep = "_")))
   
-  ## Create GAM model for drones and workers to compare size differences
+  ## Create GAM model for drones and workers to compare size class differences
   fmm6 <- gam(thoraxtemp ~ size*caste.x + 
                 s(elapse_min, by = caste_size) + 
                 s(beeid, bs = "re"), 
@@ -284,6 +296,72 @@
     xlab("Time (min)") + ylab(expression(T["est"]~(degree*C))) + 
     labs(color = "") + labs(fill = "")
 
+  
+#-- Comparing intertegular distance size classes of workers and drones --
+  ### We used 3.16 grams as it was approximately the lower quartile
+  ### for both castes.  
+  ggplot(data = subset(datAI, caste.x == "drone"),
+         aes(x = ITD)) + 
+    geom_histogram()
+  
+  ## Data cleaning
+  ITD2$caste <- tolower(ITD2$caste)
+  ITD2$beeid <- tolower(gsub("Bimp", "", ITD2$beeid))
+  
+  datAI <- merge(datA, ITD2, by = "beeid")
+  
+  head(datAI)
+  summary(ITD2$beeid)
+  summary(datA$beeid)
+  
+#-- Fitting GAM model with ITD --  
+  fmm7 <- gam(thoraxtemp ~ s(elapse_min, by = caste.x) + 
+                s(beeid, bs = "re") + 
+                s(ITD, by = caste.x),
+              data = datAI)
+  
+  anova(fmm7)
+  
+  plot(fmm3)
+  
+  ## Create size classes
+  datAI$size <- ifelse(datAI$ITD < 3.16, "Small", "Large")
+  
+  ggplot(data = datAI, aes(x = elapse_min, y = thoraxtemp, color = size)) + 
+    facet_wrap(~ caste.x) + 
+    geom_point()
+  
+  ## Queens can be omitted as they all larger than 3.16 mm
+  datAI.nq <- subset(datAI[, c(1:11, 16:25)], caste.x != "queen")
+  datAI.nq$size <- as.factor(datAI.nq$size)
+  datAI.nq$caste_size <- as.factor(with(datAI.nq, paste(caste.x, size, sep = "_")))
+  
+  ## Create GAM model for drones and workers to compare size class differences
+  fmm8 <- gam(thoraxtemp ~ size*caste.x + 
+                s(elapse_min, by = caste_size) + 
+                s(beeid, bs = "re"), 
+              data = datAI.nq)
+  anova(fmm8)
+  
+  prds <- predict_gam(fmm7, interval = "conf", exclude = "s(beeid)", level = 0.95)
+  datAIA.nq <- cbind(datAI.nq, prds)
+
+#-- Visualization of GAM model for ITD -- 
+  ggplot(data = datAIA.nq, aes(x = elapse_min, y = thoraxtemp, color= size)) + 
+    facet_wrap(~ caste.x) + 
+    geom_point(size=1.25, alpha=0.5) + 
+    geom_line(linewidth= 1,aes(y = Estimate))+
+    facet_wrap(~ caste.x, labeller = as_labeller(c("worker"="Workers", "drone"="Drones"))) +
+    geom_hline(yintercept = 30, color = "grey30", linetype = "dashed", linewidth=1)+ 
+    geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5, fill = size, color = NULL),alpha = 0.25) +
+    scale_color_manual(values = c("Small" = "grey60", "Large" = "black")) + 
+    scale_fill_manual(values = c("Small" = "grey50", "Large"= "black")) + 
+    scale_shape_manual(values = c("Large" = 1, "Small" = 16))+
+    theme_bw() + 
+    xlab("Time (min)") + ylab(expression(T["est"]~(degree*C))) + 
+    labs(color = "") + labs(fill = "")  
+  
+  
 #------------------------------------------------------------------------------
 #4.Seasonal Comparison Model  
 
