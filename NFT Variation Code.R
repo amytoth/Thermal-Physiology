@@ -126,7 +126,7 @@
 
   
 #------------------------------------------------------------------------------
-#3.Incorperating Mass Effects
+#3.Incorporating Mass Effects
 
 #-- Load data and format --
   ### Mass
@@ -449,4 +449,5 @@
           axis.title.y = element_text(size = 13,margin = margin(r=10)))
 
   
+
   #### -- END -- ####
