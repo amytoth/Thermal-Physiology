@@ -11,7 +11,7 @@
   library(nlme)
   library(readxl)
   
-  setwd()
+  setwd("C:/Users/tiger/OneDrive/Documents/Research/Bee Physiology")
 
 
 #-------------------------------------------------------
@@ -60,8 +60,9 @@
 
 #-- Using Generalized Additive Models --
   ### Create GAM model
-  fmm2 <- gam(thoraxtemp ~ caste + s(elapse_min, by = caste, bs = "cr") + 
-                s(beeid, by = caste, bs = "re"),
+  fmm2 <- gam(thoraxtemp ~ caste +                     ## Intercept
+              s(elapse_min, by = caste, bs = "cr") +   ## Slope
+              s(beeid, by = caste, bs = "re"),         ## Bee Effect
               data = dat)
   
   #-- 
@@ -97,11 +98,11 @@
                 alpha = 1/4) + 
     scale_color_manual(values = c("drone" = "dodgerblue3", "queen" = "yellow3", 
                                   "worker" = "limegreen"),
-                       labels = c("drone" = "Drones", "queen" = "Queens", 
+                       labels = c("drone" = "Males", "queen" = "Queens", 
                                   "worker" = "Workers")) +
     scale_fill_manual(values = c("drone" = "dodgerblue3", "queen" = "yellow3", 
                                  "worker" = "limegreen"),
-                      labels = c("drone" = "Drones", "queen" = "Queens", 
+                      labels = c("drone" = "Males", "queen" = "Queens", 
                                  "worker" = "Workers")) +
     theme_bw() + 
     theme(axis.title.y = element_text(size = 13,margin = margin(r=10)),
@@ -120,10 +121,13 @@
     geom_vline(xintercept = 2.5)
 
 #-- When do castes reach a given temperature -- 
-  timeAt30d <- subset(datA, Estimate > 28 & Estimate < 30.02)
+  timeAt30d <- subset(datA, Estimate > 29.5 & Estimate < 30.5)
   nrow(timeAt30d)
   aggregate(elapse_min ~ caste, FUN = mean, data = timeAt30d)
 
+  caste30 <- aov(elapse_min~caste, data=timeAt30d)
+  summary(caste30)
+  
   
 #------------------------------------------------------------------------------
 #3.Incorporating Mass Effects
@@ -176,7 +180,7 @@
                                "worker"="limegreen"))+
     guides(fill=guide_legend(title="Legend"))+
     labs( x= "", y= "Mass (g)")+
-    scale_x_discrete(labels= c("drone" = "Drones", "queen" = "Queens", 
+    scale_x_discrete(labels= c("drone" = "Males", "queen" = "Queens", 
                                "worker" = "Workers"))+
     stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), 
                  geom = "pointrange", color = "black")+
@@ -230,17 +234,19 @@
   summary (qmod)
   
 #-- Fitting GAM model with mass --
-  fmm3 <- gam(thoraxtemp ~ s(elapse_min, by = caste.x) + 
-                s(beeid, bs = "re") + 
-                s(mass, by = caste.x),
+  fmm3 <- gam(thoraxtemp ~ caste.x +           ## Intercept
+                s(elapse_min, by = caste.x) +  ## Slope
+                s(mass, by = caste.x) +        ## Mass Effect
+                s(beeid, bs = "re"),           ## Bee Effect
               data = datAM)
   
   anova(fmm3)
   plot(fmm3)
   
 #-- Model with interaction terms --
-  fmm4 <- gam(thoraxtemp ~ te(elapse_min, mass, by = caste.x) + 
-                s(beeid, bs = "re"),
+  fmm4 <- gam(thoraxtemp ~ caste.x +
+              te(elapse_min, mass, by = caste.x) + 
+              s(beeid, bs = "re"),
               data = datAM)
   
   anova(fmm4)
@@ -268,17 +274,21 @@
                                                         sep = "_")))
   
   ## Create GAM model for drones and workers to compare size class differences
-  fmm6 <- gam(thoraxtemp ~ size*caste.x + 
-                s(elapse_min, by = caste_size) + 
-                s(beeid, bs = "re"), 
+  fmm6 <- gam(thoraxtemp ~ size*caste.x +           ## Intercept 
+                s(elapse_min, by = caste_size) +    ## Slope
+                s(beeid, bs = "re"),                ## Bee Effect
               data = datAM.nq)
   anova(fmm6)
   
   prds <- predict_gam(fmm6, interval = "conf", exclude = "s(beeid)", 
                       level = 0.95)
   datAMA.nq <- cbind(datAM.nq, prds)
+  
+  ## Compare males to workers, accounting for mass to ensure caste differences are present
+  emmeans(fmm6, ~ caste.x, at = list(elapse_min = 6, mass = 0.15))
+  pairs(emmeans(fmm6, ~ caste.x, at = list(elapse_min = 6, mass = 0.15)))
 
-#-- Manuscript Figure 3 --
+  #-- Visualization of GAM model for Mass -- 
   ggplot(data = datAMA.nq, aes(x = elapse_min, y = thoraxtemp, color= size)) + 
     facet_wrap(~ caste.x) + 
     geom_point(size=1, alpha=0.8) + 
@@ -315,14 +325,15 @@
     geom_histogram()
   
 #-- Fitting GAM model with ITD --  
-  fmm7 <- gam(thoraxtemp ~ s(elapse_min, by = caste.x) + 
-                s(beeid, bs = "re") + 
-                s(ITD, by = caste.x),
+  fmm7 <- gam(thoraxtemp ~ caste.x +           ## Intercept
+                s(elapse_min, by = caste.x) +  ## Slope
+                s(beeid, bs = "re") +          ## Bee Effect
+                s(ITD, by = caste.x),          ## ITD Effect
               data = datAI)
   
   anova(fmm7)
   
-  plot(fmm3)
+  plot(fmm7)
   
   ## Create size classes
   datAI$size <- ifelse(datAI$ITD < 3.16, "Small", "Large")
@@ -337,9 +348,9 @@
   datAI.nq$caste_size <- as.factor(with(datAI.nq, paste(caste.x, size, sep = "_")))
   
   ## Create GAM model for drones and workers to compare size class differences
-  fmm8 <- gam(thoraxtemp ~ size*caste.x + 
-                s(elapse_min, by = caste_size) + 
-                s(beeid, bs = "re"), 
+  fmm8 <- gam(thoraxtemp ~ size*caste.x +           ## Intercept
+                s(elapse_min, by = caste_size) +    ## Slope
+                s(beeid, bs = "re"),                ## Bee Effect
               data = datAI.nq)
   anova(fmm8)
   
@@ -359,6 +370,54 @@
     theme_bw() + 
     xlab("Time (min)") + ylab(expression(T["est"]~(degree*C))) + 
     labs(color = "") + labs(fill = "")  
+
+#-- Combining ITD and Mass plots for comparison --
+  datAMA.nq$measure <- "Mass"
+  datAIA.nq$measure <- "ITD"
+  
+  dat_all <- rbind(datAMA.nq, datAIA.nq)
+  
+  dat_all$caste.x <- factor(dat_all$caste.x,
+                            levels = c("worker", "drone"))
+  
+  dat_all$measure <- factor(dat_all$measure,
+                            levels = c("Mass", "ITD"))
+  
+  dat_all$group_col <- interaction(dat_all$measure, dat_all$size, sep = "_")
+  
+#-- Manuscript Figure 3. -- 
+  ggplot(dat_all, aes(x = elapse_min, y = thoraxtemp, color = group_col, 
+                              fill = group_col)) +
+    geom_point(size = 1, alpha = 0.5) +
+    geom_line(aes(y = Estimate), linewidth = 0.75) +
+    geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5),
+                alpha = 0.2,
+                color = NA) +
+    geom_hline(yintercept = 30,
+               color = "grey30",
+               linetype = "dashed",
+               linewidth = 0.8) +
+    facet_grid(rows = vars(measure),cols = vars(caste.x),
+               labeller = labeller(caste.x = c(worker = "Workers", 
+                                               drone  = "Males"))) +
+    scale_color_manual(values = c(Mass_Small="grey60", Mass_Large= "black",
+                                  ITD_Small="burlywood",ITD_Large= "burlywood4"),
+                       labels = c("Mass_Small"= "Small (Mass)", 
+                                  "ITD_Small"= "Small (ITD)",
+                                  "Mass_Large"= "Large (Mass)",
+                                  "ITD_Large"= "Large (ITD)"))+
+    
+    scale_fill_manual(values = c(Mass_Small="grey60", Mass_Large= "black",
+                                 ITD_Small="burlywood",ITD_Large= "burlywood4"),
+                      labels = c("Mass_Small"= "Small (Mass)", 
+                                 "ITD_Small"= "Small (ITD)",
+                                 "Mass_Large"= "Large (Mass)",
+                                 "ITD_Large"= "Large (ITD)"))+
+    labs(x = "Time (min)",
+         y = expression(T["est"]~(degree*C)),
+         color = "",
+         fill = "") +
+    theme_bw()
   
   
 #------------------------------------------------------------------------------
@@ -377,8 +436,10 @@
   Season_Data$elapse_min_dec <- Season_Data$elapse_seconds / 60
   
 #-- Create GAM Model  
-  seasongam <- gam(thoraxtemp ~ season + s(elapse_min_dec, by = season) 
-                   + s(beeid, bs = "re"), data = Season_Data)
+  seasongam <- gam(thoraxtemp ~ season +              ## Intercept
+                   s(elapse_min_dec, by = season) +   ## Slope
+                   s(beeid, bs = "re"),               ## Bee Effect
+                   data = Season_Data)
   
   anova(seasongam)
   
@@ -432,7 +493,10 @@
   t.test(weight_g~season, data=SMass, var.equal = TRUE)
   
   ### Create GAM model
-  seasongam2 <- gam(thoraxtemp ~ s(timestamp, by = season) + s(weight_g) + s(beeid, bs = "re"),
+  seasongam2 <- gam(thoraxtemp ~ season +
+                      s(timestamp, by = season) + 
+                      s(weight_g) + 
+                      s(beeid, bs = "re"),
                     data = Season_Data, method = "REML")
   anova(seasongam2)
 
@@ -449,5 +513,5 @@
           axis.title.y = element_text(size = 13,margin = margin(r=10)))
 
   
-
   #### -- END -- ####
+  
