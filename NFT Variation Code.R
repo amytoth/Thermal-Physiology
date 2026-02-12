@@ -10,6 +10,7 @@
   library(emmeans)
   library(nlme)
   library(readxl)
+  library(tidyverse)
   
   setwd("C:/Users/tiger/OneDrive/Documents/Research/Bee Physiology")
 
@@ -243,14 +244,18 @@
   anova(fmm3)
   plot(fmm3)
   
-#-- Model with interaction terms --
-  fmm4 <- gam(thoraxtemp ~ caste.x +
-              te(elapse_min, mass, by = caste.x) + 
-              s(beeid, bs = "re"),
-              data = datAM)
+#-- Run model without queens as they are confounded in size --
+  datAM.nq <- subset(datAM[, c(1:11, 16:25)], caste.x != "queen")
+  
+  fmm4 <- gam(thoraxtemp ~ caste.x +           ## Intercept
+                s(elapse_min, by = caste.x) +  ## Slope
+                s(mass, by = caste.x) +        ## Mass Effect
+                s(beeid, bs = "re"),           ## Bee Effect
+              data = datAM.nq)
   
   anova(fmm4)
   plot(fmm4)
+  
   
 #-- Comparing mass size classes of workers and drones --
   ### We used 0.15 grams as it was approximately the lower quartile
@@ -284,10 +289,13 @@
                       level = 0.95)
   datAMA.nq <- cbind(datAM.nq, prds)
   
+  ## Test to see if the two size classes are overall different
+  emmeans(fmm6, pairwise ~ size | caste.x )
+  
   ## Compare males to workers, accounting for mass to ensure caste differences are present
-  emmeans(fmm6, ~ caste.x, at = list(elapse_min = 6, mass = 0.15))
-  pairs(emmeans(fmm6, ~ caste.x, at = list(elapse_min = 6, mass = 0.15)))
-
+  emmeans(fmm6, ~ caste.x, at = list(elapse_min = 6, mass = 0.2))
+  pairs(emmeans(fmm6, ~ caste.x, at = list(elapse_min = 6, mass = 0.2)))
+  
   #-- Visualization of GAM model for Mass -- 
   ggplot(data = datAMA.nq, aes(x = elapse_min, y = thoraxtemp, color= size)) + 
     facet_wrap(~ caste.x) + 
@@ -325,7 +333,7 @@
     geom_histogram()
   
 #-- Fitting GAM model with ITD --  
-  fmm7 <- gam(thoraxtemp ~ caste.x +           ## Intercept
+  fmm7 <- gam(thoraxtemp ~  +           ## Intercept
                 s(elapse_min, by = caste.x) +  ## Slope
                 s(beeid, bs = "re") +          ## Bee Effect
                 s(ITD, by = caste.x),          ## ITD Effect
@@ -357,6 +365,9 @@
   prds <- predict_gam(fmm8, interval = "conf", exclude = "s(beeid)", level = 0.95)
   datAIA.nq <- cbind(datAI.nq, prds)
 
+  ## Test to see if the two size classes are overall different
+  emmeans(fmm8, pairwise ~ size | caste.x )
+  
 #-- Visualization of GAM model for ITD -- 
   ggplot(data = datAIA.nq, aes(x = elapse_min, y = thoraxtemp, color= size)) + 
     facet_wrap(~ caste.x) + 
@@ -384,6 +395,8 @@
                             levels = c("Mass", "ITD"))
   
   dat_all$group_col <- interaction(dat_all$measure, dat_all$size, sep = "_")
+  
+  dat_all$group_col <- factor(dat_all$group_col, levels= c("Mass_Large", "Mass_Small", "ITD_Large", "ITD_Small"))
   
 #-- Manuscript Figure 3. -- 
   ggplot(dat_all, aes(x = elapse_min, y = thoraxtemp, color = group_col, 
@@ -418,8 +431,8 @@
          color = "",
          fill = "") +
     theme_bw()
-  
-  
+
+
 #------------------------------------------------------------------------------
 #4.Seasonal Comparison Model  
 
@@ -479,7 +492,7 @@
 #-- Run emmeans at different time points for direct comparisons -- 
   
   ### Time points are intervals of 1 minute from 0 to 10
-  pairs(emmeans(seasongam, ~ season, at = list(elapse_min_dec = 0))) 
+  pairs(emmeans(seasongam, ~ season, at = list(elapse_min_dec = 5))) 
   
 #-- Effects of Mass --
   ### Load data file
@@ -495,11 +508,15 @@
   ### Create GAM model
   seasongam2 <- gam(thoraxtemp ~ season +
                       s(timestamp, by = season) + 
-                      s(weight_g) + 
+                      s(weight_g, by = season) + 
                       s(beeid, bs = "re"),
                     data = Season_Data, method = "REML")
   anova(seasongam2)
 
+  ### Time points are intervals of 1 minute from 0 to 10
+  pairs(emmeans(seasongam2, ~ season, at = list(elapse_min_dec = 2))) 
+  
+  
 #-- Manuscript Figure 4A --
   ggplot(data=SMass, aes(x= season, y=weight_g, fill= season)) +
     geom_violin(alpha = 0.5)+
@@ -512,6 +529,35 @@
     theme(legend.position = "none",
           axis.title.y = element_text(size = 13,margin = margin(r=10)))
 
+
+## Analyze seasonal differences using only individuals that overlap in mass between seasons 
+ # Max
+   smass2 <- SMass %>%
+            filter(season == "Spring") %>%
+            summarise(max_weight = max(weight_g, na.rm = TRUE))
+  smass2  # Max is 0.739
+ 
+ # Min 
+  smass3 <- SMass %>%
+            filter(season == "Fall") %>%
+            summarise(min_weight = min(weight_g, na.rm = TRUE))
+      
+  smass3 # Min is 0.542
+  
+## Create data subset
+  Season_Data_sub <- Season_Data %>%
+    filter(weight_g >= 0.542, weight_g <= 0.739)
+  
+  ggplot(data = Season_Data_sub, aes(x = season, y = weight_g)) + 
+    geom_point()
+  
+## Run GAM
+  seasongam3 <- gam(thoraxtemp ~ season +
+                      s(timestamp, by = season) + 
+                      s(weight_g, by = season) + 
+                      s(beeid, bs = "re"),
+                    data = Season_Data_sub, method = "REML")
+  anova(seasongam2)
+
   
   #### -- END -- ####
-  
