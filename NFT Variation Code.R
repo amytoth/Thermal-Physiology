@@ -14,7 +14,6 @@
   
   setwd("C:/Users/tiger/OneDrive/Documents/Research/Bee Physiology")
 
-
 #-------------------------------------------------------
 # 1.Camera Validation 
 
@@ -110,8 +109,7 @@
           axis.title.x = element_text(size = 13,margin = margin(r=10)))+
     xlab("Time (min)") + ylab(expression(T["est"]~(degree*C))) + 
     labs(color = "") + labs(fill = "")
-
-
+  
 #-- Run emmeans at different time points for direct comparisons -- 
 
   ### Time points are intervals of 0.5 minutes from 0 to 10
@@ -245,6 +243,7 @@
   plot(fmm3)
   
 #-- Run model without queens as they are confounded in size --
+  datAM$size <- ifelse(datAM$mass < 0.15, "Small", "Large")
   datAM.nq <- subset(datAM[, c(1:11, 16:25)], caste.x != "queen")
   
   fmm4 <- gam(thoraxtemp ~ caste.x +           ## Intercept
@@ -255,7 +254,6 @@
   
   anova(fmm4)
   plot(fmm4)
-  
   
 #-- Comparing mass size classes of workers and drones --
   ### We used 0.15 grams as it was approximately the lower quartile
@@ -289,12 +287,14 @@
                       level = 0.95)
   datAMA.nq <- cbind(datAM.nq, prds)
   
-  ## Test to see if the two size classes are overall different
+  ## Test to see if the two size classes are overall different within each caste
   emmeans(fmm6, pairwise ~ size | caste.x )
+    # And at specific points
+  emmeans(fmm6, pairwise ~ size | caste.x, at = list(elapse_min = 5))
   
   ## Compare males to workers, accounting for mass to ensure caste differences are present
-  emmeans(fmm6, ~ caste.x, at = list(elapse_min = 6, mass = 0.2))
-  pairs(emmeans(fmm6, ~ caste.x, at = list(elapse_min = 6, mass = 0.2)))
+  emmeans(fmm6, ~ caste.x, at = list(elapse_min = 5, mass = 0.2))
+  pairs(emmeans(fmm6, ~ caste.x, at = list(elapse_min = 5, mass = 0.2)))
   
   #-- Visualization of GAM model for Mass -- 
   ggplot(data = datAMA.nq, aes(x = elapse_min, y = thoraxtemp, color= size)) + 
@@ -365,7 +365,7 @@
   prds <- predict_gam(fmm8, interval = "conf", exclude = "s(beeid)", level = 0.95)
   datAIA.nq <- cbind(datAI.nq, prds)
 
-  ## Test to see if the two size classes are overall different
+  ## Test to see if the two size classes are overall different within each caste
   emmeans(fmm8, pairwise ~ size | caste.x )
   
 #-- Visualization of GAM model for ITD -- 
@@ -489,11 +489,7 @@
     ylab(expression(T["est"]~(degree*C))) +
     labs(color = "") + labs(fill = "")
 
-#-- Run emmeans at different time points for direct comparisons -- 
-  
-  ### Time points are intervals of 1 minute from 0 to 10
-  pairs(emmeans(seasongam, ~ season, at = list(elapse_min_dec = 5))) 
-  
+
 #-- Effects of Mass --
   ### Load data file
   SMass <- read.csv("Season mass.csv")
@@ -506,15 +502,15 @@
   t.test(weight_g~season, data=SMass, var.equal = TRUE)
   
   ### Create GAM model
-  seasongam2 <- gam(thoraxtemp ~ season +
-                      s(timestamp, by = season) + 
-                      s(weight_g, by = season) + 
-                      s(beeid, bs = "re"),
+  seasongam2 <- gam(thoraxtemp ~ season +                # Intercept
+                      s(elapse_min_dec, by = season) +   # Slope
+                      s(weight_g, by = season) +         # Mass Effect
+                      s(beeid, bs = "re"),               # Bee Effect
                     data = Season_Data, method = "REML")
   anova(seasongam2)
-
+#-- Run emmeans at different time points for direct comparisons -- 
   ### Time points are intervals of 1 minute from 0 to 10
-  pairs(emmeans(seasongam2, ~ season, at = list(elapse_min_dec = 2))) 
+  pairs(emmeans(seasongam2, ~ season, at = list(elapse_min_dec = 5))) 
   
   
 #-- Manuscript Figure 4A --
@@ -552,12 +548,14 @@
     geom_point()
   
 ## Run GAM
-  seasongam3 <- gam(thoraxtemp ~ season +
-                      s(timestamp, by = season) + 
-                      s(weight_g, by = season) + 
-                      s(beeid, bs = "re"),
+  seasongam3 <- gam(thoraxtemp ~ season +                     # Intercept
+                      s(elapse_min_dec, by = season) +        # Slope
+                      s(weight_g) +                           # Mass effect
+                      s(beeid, bs = "re"),                    # Bee Effect
                     data = Season_Data_sub, method = "REML")
-  anova(seasongam2)
+  anova(seasongam3)
 
+  t.test(weight_g ~ season, data = Season_Data_sub)
   
+  pairs(emmeans(seasongam3, ~ season, at = list(elapse_min_dec = 7, weight_g = 0.7)))
   #### -- END -- ####
