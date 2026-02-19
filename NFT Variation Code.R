@@ -38,7 +38,7 @@
 
 
 #------------------------------------------------------------------------------
-#2.Caste Comparison Model
+#2.Caste Comparison Models
 
 #-- Load Data --
   ### CSV input
@@ -59,7 +59,7 @@
     geom_smooth(se = FALSE)
 
 #-- Using Generalized Additive Models --
-  ### Create GAM model
+  ### Create GAM model (***** MODEL 1*******)
   fmm2 <- gam(thoraxtemp ~ caste +                     ## Intercept
               s(elapse_min, by = caste, bs = "cr") +   ## Slope
               s(beeid, by = caste, bs = "re"),         ## Bee Effect
@@ -129,7 +129,7 @@
   
   
 #------------------------------------------------------------------------------
-#3.Incorporating Mass Effects
+#3. Caste models incorporating Mass, ITD, and Size Class Effects*********
 
 #-- Load data and format --
   ### Mass
@@ -232,7 +232,7 @@
   qmod <- lm(Mass~ITD, data = qs)
   summary (qmod)
   
-#-- Fitting GAM model with mass --
+#-- Fitting GAM model with mass -- ***** MODEL 2 ******
   fmm3 <- gam(thoraxtemp ~ caste.x +           ## Intercept
                 s(elapse_min, by = caste.x) +  ## Slope
                 s(mass, by = caste.x) +        ## Mass Effect
@@ -245,7 +245,9 @@
 #-- Run model without queens as they are confounded in size --
   datAM$size <- ifelse(datAM$mass < 0.15, "Small", "Large")
   datAM.nq <- subset(datAM[, c(1:11, 16:25)], caste.x != "queen")
-  
+
+#-- Fitting GAM model for workers and males with MASS -- ***** MODEL 4 ****** 
+
   fmm4 <- gam(thoraxtemp ~ caste.x +           ## Intercept
                 s(elapse_min, by = caste.x) +  ## Slope
                 s(mass, by = caste.x) +        ## Mass Effect
@@ -276,7 +278,7 @@
   datAM.nq$caste_size <- as.factor(with(datAM.nq, paste(caste.x, size, 
                                                         sep = "_")))
   
-  ## Create GAM model for drones and workers to compare size class differences
+  ## Create GAM model for drones and workers to compare size class differences ***** MODEL 3, same as fmm8? *******
   fmm6 <- gam(thoraxtemp ~ size*caste.x +           ## Intercept 
                 s(elapse_min, by = caste_size) +    ## Slope
                 s(beeid, bs = "re"),                ## Bee Effect
@@ -332,7 +334,7 @@
          aes(x = ITD)) + 
     geom_histogram()
   
-#-- Fitting GAM model with ITD --  
+#-- Fitting GAM model with ITD --  ****** MODEL 5  ********
   fmm7 <- gam(thoraxtemp ~  +           ## Intercept
                 s(elapse_min, by = caste.x) +  ## Slope
                 s(beeid, bs = "re") +          ## Bee Effect
@@ -355,7 +357,7 @@
   datAI.nq$size <- as.factor(datAI.nq$size)
   datAI.nq$caste_size <- as.factor(with(datAI.nq, paste(caste.x, size, sep = "_")))
   
-  ## Create GAM model for drones and workers to compare size class differences
+  ## Create GAM model for drones and workers to compare size class differences **** SAME AS MODEL 3? ****
   fmm8 <- gam(thoraxtemp ~ size*caste.x +           ## Intercept
                 s(elapse_min, by = caste_size) +    ## Slope
                 s(beeid, bs = "re"),                ## Bee Effect
@@ -448,7 +450,7 @@
                                                        units = "secs"))
   Season_Data$elapse_min_dec <- Season_Data$elapse_seconds / 60
   
-#-- Create GAM Model  
+#-- Create GAM Model **** ALEX DO WE NEED THIS? We end up reporting the model with mass only ****
   seasongam <- gam(thoraxtemp ~ season +              ## Intercept
                    s(elapse_min_dec, by = season) +   ## Slope
                    s(beeid, bs = "re"),               ## Bee Effect
@@ -501,7 +503,7 @@
   ### Test for difference between groups
   t.test(weight_g~season, data=SMass, var.equal = TRUE)
   
-  ### Create GAM model
+  ### Create GAM model ***** MODEL 6 ******
   seasongam2 <- gam(thoraxtemp ~ season +                # Intercept
                       s(elapse_min_dec, by = season) +   # Slope
                       s(weight_g, by = season) +         # Mass Effect
@@ -558,4 +560,5 @@
   t.test(weight_g ~ season, data = Season_Data_sub)
   
   pairs(emmeans(seasongam3, ~ season, at = list(elapse_min_dec = 7, weight_g = 0.7)))
+
   #### -- END -- ####
