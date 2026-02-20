@@ -318,11 +318,6 @@
                         level = 0.95)
     datAMA.nq <- cbind(datAM.nq, prds)
     
-    ## Test to see if the two size classes are overall different within each caste
-    emmeans(fmm5, pairwise ~ size | caste.x )
-      # And at specific points
-    emmeans(fmm5, pairwise ~ size | caste.x, at = list(elapse_min = 5))
-    
     ## Compare males to workers, accounting for mass to ensure caste differences are present
     emmeans(fmm5, ~ caste.x, at = list(elapse_min = 5, mass = 0.2))
     pairs(emmeans(fmm5, ~ caste.x, at = list(elapse_min = 5, mass = 0.2)))
@@ -524,7 +519,6 @@
     theme(legend.position = "none",
           axis.title.y = element_text(size = 13,margin = margin(r=10)))
 
-
 ## Analyze seasonal differences using only individuals that overlap in mass between seasons 
  # Max
    smass2 <- SMass %>%
@@ -547,6 +541,7 @@
     geom_point()
   
 ## Run GAM
+  #(***** Model 8 *****)
   fmm8 <- gam(thoraxtemp ~ season +                     # Intercept
                       s(elapse_min_dec, by = season) +        # Slope
                       s(weight_g) +                           # Mass effect
