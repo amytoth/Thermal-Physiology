@@ -454,15 +454,25 @@
                                                        units = "secs"))
   Season_Data$elapse_min_dec <- Season_Data$elapse_seconds / 60
   
+  ### Add Mass files
+  SMass <- read.csv("Season mass.csv")
+  
+  ### Visualize to ensure input
+  ggplot(data = SMass, aes(x = season, y = weight_g)) + 
+    geom_point()
+  
+  ### Test for difference between groups
+  t.test(weight_g~season, data=SMass, var.equal = TRUE)
+
 #-- Create GAM Model  
   # (***** Model 7 *****)
-  fmm7 <- gam(thoraxtemp ~ season +              ## Intercept
-                   s(elapse_min_dec, by = season) +   ## Slope
-                   s(beeid, bs = "re"),               ## Bee Effect
-                   data = Season_Data)
-  
+  fmm7 <- gam(thoraxtemp ~ season +                # Intercept
+                s(elapse_min_dec, by = season) +   # Slope
+                s(weight_g) +                      # Mass Effect
+                s(beeid, bs = "re"),               # Bee Effect
+              data = Season_Data, method = "REML")
   anova(fmm7)
-  
+
   prdz <- predict_gam(fmm7, interval = "conf", level = 0.95, 
                       exclude = "s(beeid)")
   names(prdz)
@@ -497,28 +507,9 @@
     labs(color = "") + labs(fill = "")
 
 
-#-- Effects of Mass --
-  ### Load data file
-  SMass <- read.csv("Season mass.csv")
-  
-  ### Visualize to ensure input
-  ggplot(data = SMass, aes(x = season, y = weight_g)) + 
-    geom_point()
-  
-  ### Test for difference between groups
-  t.test(weight_g~season, data=SMass, var.equal = TRUE)
-  
-  ### Create GAM model
-  # (***** Model 8 *****)
-  fmm8 <- gam(thoraxtemp ~ season +                # Intercept
-                      s(elapse_min_dec, by = season) +   # Slope
-                      s(weight_g) +                      # Mass Effect
-                      s(beeid, bs = "re"),               # Bee Effect
-                    data = Season_Data, method = "REML")
-  anova(fmm8)
 #-- Run emmeans at different time points for direct comparisons -- 
   ### Time points are intervals of 1 minute from 0 to 10
-  pairs(emmeans(fmm8, ~ season, at = list(elapse_min_dec = 5))) 
+  pairs(emmeans(fmm7, ~ season, at = list(elapse_min_dec = 5))) 
   
   
 #-- Manuscript Figure 4A --
@@ -556,15 +547,15 @@
     geom_point()
   
 ## Run GAM
-  fmm9 <- gam(thoraxtemp ~ season +                     # Intercept
+  fmm8 <- gam(thoraxtemp ~ season +                     # Intercept
                       s(elapse_min_dec, by = season) +        # Slope
                       s(weight_g) +                           # Mass effect
                       s(beeid, bs = "re"),                    # Bee Effect
                     data = Season_Data_sub, method = "REML")
-  anova(fmm9)
+  anova(fmm8)
 
   t.test(weight_g ~ season, data = Season_Data_sub)
   
-  pairs(emmeans(fmm9, ~ season, at = list(elapse_min_dec = 7, weight_g = 0.7)))
+  pairs(emmeans(fmm8, ~ season, at = list(elapse_min_dec = 7, weight_g = 0.7)))
 
 #### -- END -- ####
