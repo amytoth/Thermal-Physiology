@@ -11,11 +11,13 @@
   library(nlme)
   library(readxl)
   library(tidyverse)
+  library(gratia)
   
   setwd("C:/Users/tiger/OneDrive/Documents/Research/Bee Physiology")
 
-#-------------------------------------------------------
+#------------------------------------------------------------------------------
 # 1.Camera Validation 
+#------------------------------------------------------------------------------
 
 #-- Load Data --
   dat<-read.csv("Camera Validation.csv")
@@ -39,7 +41,8 @@
 
 #------------------------------------------------------------------------------
 #2.Caste Comparison Models
-
+#------------------------------------------------------------------------------
+  
 #-- Load Data --
   ### CSV input
   qData <- read.csv("queen_nft_data_tidy.csv", stringsAsFactors = TRUE)
@@ -51,13 +54,25 @@
                data.frame(caste = "drone", dData),
                data.frame(caste = "worker", wData))
   dat$caste <- as.factor(dat$caste)
-  dat <- subset(dat, elapse_min < 10)
+  dat <- subset(dat, elapse_min < 10.5)
 
   ### Plot to ensure data input--
   ggplot(data = dat, aes(x = elapse_min, y = thoraxtemp, color = caste)) + 
     geom_point() + 
     geom_smooth(se = FALSE)
-
+  
+        
+  ### Test for difference in initial and final temperature across castes
+  t_initial <- dat %>%
+        filter(elapse_min == 0)
+  t_i <- aov(thoraxtemp ~ caste, data = t_initial)
+  summary(t_i)
+  
+  t_final <- dat %>%
+        filter(elapse_min >= 9.5, elapse_min <= 10.5)
+  t_f <- aov(thoraxtemp ~ caste, data = t_final)
+  summary(t_f)
+  
 #-- Using Generalized Additive Models --
   ### Create GAM model 
   # (***** Model 1 *****)
@@ -73,7 +88,7 @@
   datA <- cbind(dat, prds)
   
   anova(fmm1)
-
+  
   ### Visualize individual curves 
   ggplot(data = datA, aes(x = elapse_min, y = thoraxtemp, color = caste)) + 
     facet_wrap(~caste) + 
@@ -89,12 +104,95 @@
     geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5, fill = caste, color = NULL), 
                 alpha = 1/4)
 
+#-- Run emmeans at different time points for direct comparisons -- 
+
+  ### Time points are intervals of 0.5 minutes from 0 to 10
+  ### Following example is for time point 2.5 (2 and a half minutes)
+  emmeans(fmm1, ~caste, at = list(elapse_min = 0))
+  pairs(emmeans(fmm1, ~caste, at = list(elapse_min = 0)))
+  plot(pairs(emmeans(fmm1, ~caste, at = list(elapse_min = 2.5)))) + 
+    geom_vline(xintercept = 2.5)
+
+#-- At what temperature and time is there an inflection for each caste --
+  ### Tests for Passive to Active rewarming transistion
+  
+  ### Create a data grid and organize data
+  grid <- expand.grid(
+    elapse_min = seq(min(dat$elapse_min), max(dat$elapse_min), length.out = 1000),
+    caste = levels(dat$caste)
+  )
+  
+  ### Clean data
+  grid$beeid <- levels(dat$beeid)[1]
+  grid$fit <- pred
+  
+  ### Create prediction for the model fit
+  pred <- predict(fmm1,
+                  newdata = grid,
+                  type = "link",
+                  exclude = c("s(beeid):castedrone",
+                              "s(beeid):castequeen",
+                              "s(beeid):casteworker"))
+  ### Find Derivatives
+  derivs <- grid %>%
+    group_by(caste) %>%
+    arrange(elapse_min) %>%
+    mutate(
+      d1 = c(NA, diff(fit) / diff(elapse_min)),
+      d2 = c(NA, NA, diff(d1[-1]) / diff(elapse_min[-1]))
+    )
+  
+  ### Find inflection points
+  infl <- derivs %>%
+    group_by(caste) %>%
+    summarize(
+      inflection = elapse_min[which(diff(sign(d2)) != 0)[1]]
+    )
+  
+  infl
+  
+  ### What is the thorax temperature at the inflection
+  
+  infl_with_temp <- infl %>%
+    left_join(
+      grid %>%
+        group_by(caste) %>%
+        mutate(diff = abs(elapse_min - first(infl$inflection[caste == unique(caste)]))) %>%
+        slice_min(diff, n = 1),
+      by = "caste"
+    ) %>%
+    select(caste, inflection, temperature = fit)
+  
+  infl_with_temp <- derivs %>%
+    group_by(caste) %>%
+    arrange(elapse_min) %>%
+    mutate(
+      sign_change = c(NA, diff(sign(d2)))
+    ) %>%
+    filter(!is.na(sign_change) & sign_change != 0) %>%
+    slice(1) %>%
+    select(
+      caste,
+      inflection = elapse_min,
+      temperature = fit
+    ) %>%
+    ungroup()
+  
+  infl_with_temp
+  
+  # Create inflection point data frame for plotting
+  Inflect.pts <- data.frame(
+    caste = c("drone", "worker", "queen"),
+    x = c(3.08, 3.44, 4.39),
+    y = c(27, 27.2, 25.2)
+  )
+  
 #-- Manuscript Figure 2.B -- 
-  ggplot(data = datA, aes(x = elapse_min, y = thoraxtemp, color = caste)) + 
+  CasteGAM<- ggplot(data = datA, aes(x = elapse_min, y = thoraxtemp, color = caste)) + 
     geom_point(size=1.25, alpha=0.5) + 
     geom_line(linewidth= 1,aes(y = Estimate))+
-    geom_hline(yintercept = 30, color = "grey30", linetype = "dashed", 
-               linewidth=1)+ 
+    geom_point(data = Inflect.pts, aes(x=x, y=y, fill=caste),
+               shape=23, size=2, color="black", stroke=1.2)+ 
     geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5, fill = caste, color = NULL), 
                 alpha = 1/4) + 
     scale_color_manual(values = c("drone" = "dodgerblue3", "queen" = "yellow3", 
@@ -111,27 +209,12 @@
     xlab("Time (min)") + ylab(expression(T["est"]~(degree*C))) + 
     labs(color = "") + labs(fill = "")
   
-#-- Run emmeans at different time points for direct comparisons -- 
+  ggsave("Figure 2B.png", plot = CasteGAM, width = 6, height = 4, units= "in", dpi=300)
 
-  ### Time points are intervals of 0.5 minutes from 0 to 10
-  ### Following example is for time point 2.5 (2 and a half minutes)
-  emmeans(fmm1, ~caste, at = list(elapse_min = 2.5))
-  pairs(emmeans(fmm1, ~caste, at = list(elapse_min = 2.5)))
-  plot(pairs(emmeans(fmm1, ~caste, at = list(elapse_min = 2.5)))) + 
-    geom_vline(xintercept = 2.5)
-
-#-- When do castes reach a given temperature -- 
-  timeAt30d <- subset(datA, Estimate > 29.5 & Estimate < 30.5)
-  nrow(timeAt30d)
-  aggregate(elapse_min ~ caste, FUN = mean, data = timeAt30d)
-
-  caste30 <- aov(elapse_min~caste, data=timeAt30d)
-  summary(caste30)
-  
-  
 #------------------------------------------------------------------------------
 #3.Caste Models Incorporating Mass, ITD, and Size Class Effects
-
+#------------------------------------------------------------------------------
+  
 #-- Load data and format --
   ### Mass
   mass <- read_excel("1. Meta Data.xlsx")
@@ -253,7 +336,6 @@
               data = datAM)
   
   anova(fmm2)
-  plot(fmm2)
   
 #-- Run model without queens as they are confounded in size -- 
   datAM$size <- ifelse(datAM$mass < 0.15, "Small", "Large")
@@ -267,8 +349,6 @@
               data = datAM.nq)
   
   anova(fmm3)
-  plot(fmm3)
-  
   
 #-- Fitting GAM model with ITD -- 
   # (***** Model 4 *****)
@@ -280,8 +360,8 @@
   
   anova(fmm4)
   
-  plot(fmm4) 
-  
+#-- Contrast model fits for Mass and ITD GAMS --
+  AIC(fmm2, fmm4, k=2)
    
 #-- Comparing size classes of workers and drones --
   
@@ -320,7 +400,7 @@
     
     ## Compare males to workers, accounting for mass to ensure caste differences are present
     emmeans(fmm5, ~ caste.x, at = list(elapse_min = 5, mass = 0.2))
-    pairs(emmeans(fmm5, ~ caste.x, at = list(elapse_min = 5, mass = 0.2)))
+    pairs(emmeans(fmm5, ~ caste.x, at = list(elapse_min = 6.5, mass = 0.2)))
     
     #-- Visualization of GAM model for Mass -- 
     ggplot(data = datAMA.nq, aes(x = elapse_min, y = thoraxtemp, color= size)) + 
@@ -399,6 +479,9 @@
     
     dat_all$group_col <- factor(dat_all$group_col, levels= c("Mass_Large", "Mass_Small", "ITD_Large", "ITD_Small"))
     
+    #-- Contrast model fits for Mass and ITD GAMS --
+    AIC(fmm5, fmm6, k=2)
+    
   #-- Manuscript Figure 3. -- 
     ggplot(dat_all, aes(x = elapse_min, y = thoraxtemp, color = group_col, 
                                 fill = group_col)) +
@@ -407,10 +490,6 @@
       geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5),
                   alpha = 0.2,
                   color = NA) +
-      geom_hline(yintercept = 30,
-                 color = "grey30",
-                 linetype = "dashed",
-                 linewidth = 0.8) +
       facet_grid(rows = vars(measure),cols = vars(caste.x),
                  labeller = labeller(caste.x = c(worker = "Workers", 
                                                  drone  = "Males"))) +
@@ -433,10 +512,10 @@
            fill = "") +
       theme_bw()
 
-
 #------------------------------------------------------------------------------
 #4.Seasonal Comparison Model  
-
+#------------------------------------------------------------------------------
+    
 #-- Load Data --  
   Season_Data <- read.csv("spring__fall_queen_data.csv", stringsAsFactors = TRUE)
   
@@ -484,12 +563,66 @@
   datB$season <- factor(datB$season, levels = c("fall","spring"), 
                         labels = c("Fall", "Spring"))
   
+#-- At what temperature and time is there an inflection for each caste --
+  ### Tests for Passive to Active rewarming transition
+  
+  ### Create a data grid and organize data
+  grid <- expand.grid(
+    elapse_min_dec = seq(min(Season_Data$elapse_min_dec), max(Season_Data$elapse_min_dec), length.out = 1000),
+    season = levels(Season_Data$season),
+    weight_g = mean(Season_Data$weight_g, na.rm = TRUE)
+  )
+  grid$beeid <- levels(Season_Data$beeid)[1]
+  
+  
+  ### Create prediction for the model fit
+  pred <- predict(fmm7,
+                  newdata = grid,
+                  type = "link")
+  grid$fit <- pred
+  
+  ### Find Derivatives
+  derivs <- grid %>%
+    group_by(season) %>%
+    arrange(elapse_min_dec) %>%
+    mutate(
+      d1 = c(NA, diff(fit) / diff(elapse_min_dec)),
+      d2 = c(NA, diff(d1) / diff(elapse_min_dec))
+    )
+  
+  ### Find inflection points
+  infl <- derivs %>%
+    group_by(season) %>%
+    summarize(
+      inflection = elapse_min_dec[which(diff(sign(d2)) != 0)[1]]
+    )
+  
+  ### What is the thorax temperature at the inflection
+  infl_with_temp <- infl %>%
+    left_join(
+      grid %>%
+        group_by(season) %>%
+        mutate(diff = abs(elapse_min_dec - first(infl$inflection[season == unique(season)]))) %>%
+        slice_min(diff, n = 1),
+      by = "season"
+    ) %>%
+    select(season, inflection, temperature = fit)
+  
+  infl_with_temp
+  
+  # Create inflection point data frame for plotting
+  Inflect.pts2 <- data.frame(
+    season = c("Fall", "Spring"),
+    x = c(4.25, 4.96),
+    y = c(24.6, 25.1)
+  )
+  
 #-- Manuscript Figure 4B --
-  ggplot(data = datB, aes(x = elapse_min_dec, y = thoraxtemp, color = season)) +  
+  SeasonGAM<- ggplot(data = datB, aes(x = elapse_min_dec, y = thoraxtemp, color = season)) +  
     geom_point(size=1.25, alpha = 0.5) +
     geom_line(linewidth= 1, aes(group = season, y = Estimate)) +
-    geom_hline(yintercept = 30, color = "grey30", linetype = "dashed", 
-               linewidth=1)+
+    geom_point(data = Inflect.pts2, aes(x=x, y=y, fill=season),
+               shape=23, size=2, color="black", stroke=1.2)+ 
     geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5, fill = season, color = NULL),
                 alpha = 0.25) + 
     scale_color_manual(values = c("Fall" = "yellow3", "Spring" = "orchid2")) +
@@ -501,10 +634,11 @@
     ylab(expression(T["est"]~(degree*C))) +
     labs(color = "") + labs(fill = "")
 
-
+  ggsave("Figure 4B.png", plot = SeasonGAM, width = 6, height = 4, units= "in", dpi=300)
+  
 #-- Run emmeans at different time points for direct comparisons -- 
   ### Time points are intervals of 1 minute from 0 to 10
-  pairs(emmeans(fmm7, ~ season, at = list(elapse_min_dec = 5))) 
+  pairs(emmeans(fmm7, ~ season, at = list(elapse_min_dec = 10))) 
   
   
 #-- Manuscript Figure 4A --
@@ -548,9 +682,9 @@
                       s(beeid, bs = "re"),                    # Bee Effect
                     data = Season_Data_sub, method = "REML")
   anova(fmm8)
-
+  
   t.test(weight_g ~ season, data = Season_Data_sub)
   
   pairs(emmeans(fmm8, ~ season, at = list(elapse_min_dec = 7, weight_g = 0.7)))
-
+  
 #### -- END -- ####
